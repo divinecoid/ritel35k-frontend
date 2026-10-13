@@ -7,10 +7,9 @@
 	import Select from '#lib/components/ui/Select.svelte';
 	import { ApiError } from '#lib/api/client';
 	import { idr } from '#lib/utils/format';
-	import type { SaleDetail } from '#lib/types/api';
-	import type { PayLine, PosState } from './pos.svelte';
+	import type { OfflineSaleDetail, PayLine, PosState } from './pos.svelte';
 
-	let { pos, open = $bindable(), oncomplete }: { pos: PosState; open: boolean; oncomplete: (s: SaleDetail) => void } = $props();
+	let { pos, open = $bindable(), oncomplete }: { pos: PosState; open: boolean; oncomplete: (s: OfflineSaleDetail) => void } = $props();
 
 	let points = $state(0);
 	const maxPts = $derived(pos.quote?.max_redeem_points ?? 0);
@@ -49,7 +48,7 @@
 		busy = true;
 		error = '';
 		try {
-			const sale = await pos.checkout(total > 0 ? lines : [], pos.quote?.approval_required ? approver : undefined, points);
+			const sale = await pos.checkout(total > 0 ? lines : [], pos.quote?.approval_required && !pos.useEdge ? approver : undefined, points);
 			open = false;
 			oncomplete(sale);
 		} catch (e) {
@@ -64,7 +63,7 @@
 								? 'Shift Anda sudah tertutup. Buka shift lagi.'
 								: e.message;
 				if (e.code === 'SHIFT_REQUIRED') void pos.loadShift();
-			} else error = 'Gagal terhubung ke server. Coba lagi — transaksi yang sama tidak akan tercatat dua kali.';
+			} else error = e instanceof Error && e.message && !(e instanceof TypeError) ? e.message : 'Gagal menyimpan transaksi. Coba lagi — transaksi yang sama tidak akan tercatat dua kali.';
 		} finally {
 			busy = false;
 		}
@@ -77,7 +76,9 @@
 		<span class="num text-3xl font-semibold">{idr(total)}</span>
 	</div>
 
-	{#if pos.quote?.customer && maxPts > 0}
+	{#if pos.useEdge}
+		<p class="rounded-md bg-warn/10 px-3 py-2 text-warn">Mode offline — struk memakai nomor sementara; nomor resmi menyusul saat sinkron.</p>
+	{:else if pos.quote?.customer && maxPts > 0}
 		<div class="flex items-center justify-between gap-3 rounded-md border border-border p-3">
 			<div><p class="font-medium">Pakai poin {pos.quote.customer.name}</p><p class="text-[12px] text-muted">Saldo {pos.quote.customer.points_balance} poin · maks {maxPts} poin ({idr(maxPts * redeemValue)}) · 1 poin = {idr(redeemValue)}</p></div>
 			<div class="flex items-center gap-2"><Input class="num h-8 w-24 text-right" inputmode="numeric" value={points || ''} placeholder="0" aria-label="Poin dipakai" onchange={(e) => (points = Math.max(0, Math.min(maxPts, Number(e.currentTarget.value) || 0)))} />
@@ -108,7 +109,7 @@
 		<div class="rounded-md border border-border p-2 {change > 0 ? 'border-ok/50' : ''}"><p class="text-muted">Kembalian</p><p class="num text-lg font-semibold {change > 0 ? 'text-ok' : ''}">{idr(change)}</p></div>
 	</div>
 
-	{#if pos.quote?.approval_required}
+	{#if pos.quote?.approval_required && !pos.useEdge}
 		<div class="space-y-2 rounded-md border border-warn/40 bg-warn/10 p-3">
 			<p class="font-medium text-warn">Diskon melebihi batas {pos.quote.max_discount_percent}% — butuh persetujuan supervisor</p>
 			<div class="grid grid-cols-2 gap-2">
@@ -121,6 +122,6 @@
 
 	{#snippet footer()}
 		<Button variant="secondary" onclick={() => (open = false)}>Batal</Button>
-		<Button loading={busy} disabled={!valid || (points > 0 && points < (pos.quote?.min_redeem_points ?? 0)) || (pos.quote?.approval_required && (!approver.pin || !approver.approver_email))} onclick={pay}>Bayar {idr(total)}</Button>
+		<Button loading={busy} disabled={!valid || (points > 0 && points < (pos.quote?.min_redeem_points ?? 0)) || (pos.quote?.approval_required && (pos.useEdge || !approver.pin || !approver.approver_email))} onclick={pay}>Bayar {idr(total)}</Button>
 	{/snippet}
 </Dialog>

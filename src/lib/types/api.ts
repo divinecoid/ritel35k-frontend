@@ -161,6 +161,70 @@ export interface Terminal {
 	status: string;
 }
 
+export interface TerminalSync {
+	terminal_id: string;
+	token_hint: string;
+	created_at: string;
+	last_sync_at: string | null;
+	last_ip: string;
+	agent_version: string;
+	pending: number;
+	snapshot_version: string;
+}
+
+export interface OfflineException {
+	id: string;
+	store_id: string;
+	terminal_id: string | null;
+	sale_id: string | null;
+	type: string;
+	severity: 'info' | 'warning' | 'critical';
+	title: string;
+	detail: Record<string, unknown>;
+	status: 'open' | 'reviewed' | 'dismissed';
+	created_at: string;
+	reviewed_at: string | null;
+	review_note: string;
+	store_name: string;
+	terminal_code: string;
+	document_number: string;
+	local_number: string;
+	grand_total: string;
+	reviewed_by_name: string;
+}
+
+export interface ReplenishmentSuggestion {
+	store_id: string;
+	store_name: string;
+	warehouse_id: string;
+	warehouse_code: string;
+	variant_id: string;
+	sku: string;
+	name: string;
+	on_hand: string;
+	in_transit: string;
+	sold: string;
+	daily_demand: string;
+	trend: 'up' | 'down' | 'flat';
+	days_of_cover: string | null;
+	lead_days: number;
+	target: string;
+	suggested_qty: string;
+	urgency: 'stockout' | 'critical' | 'reorder';
+	supplier_id: string | null;
+	supplier_name: string;
+	unit_price: string;
+	estimated_cost: string;
+}
+export interface ReplenishmentResult {
+	window_days: number;
+	cover_days: number;
+	from: string;
+	to: string;
+	total_cost: string;
+	suggestions: ReplenishmentSuggestion[];
+}
+
 export interface ShiftTotals {
 	cash_sales: string;
 	noncash_sales: string;
@@ -174,6 +238,7 @@ export interface ShiftTotals {
 	expected_cash: string;
 }
 export interface Shift {
+	offline?: boolean;
 	id: string;
 	store_id: string;
 	terminal_id: string;
@@ -708,7 +773,7 @@ export interface RfidVarianceRow {
 	tag_qty: number;
 	system_qty: string;
 }
-export type SecurityType = 'UNAUTHORIZED_EXIT' | 'UNKNOWN_TAG' | 'RFID_MISMATCH' | 'EXCESSIVE_VOIDS' | 'LARGE_REFUND' | 'HIGH_DISCOUNT' | 'CASH_VARIANCE' | 'READER_OFFLINE';
+export type SecurityType = 'UNAUTHORIZED_EXIT' | 'UNKNOWN_TAG' | 'RFID_MISMATCH' | 'EXCESSIVE_VOIDS' | 'LARGE_REFUND' | 'HIGH_DISCOUNT' | 'CASH_VARIANCE' | 'READER_OFFLINE' | 'OFFLINE_PRICE_MISMATCH';
 export interface SecurityEventRow {
 	id: string;
 	store_id: string;

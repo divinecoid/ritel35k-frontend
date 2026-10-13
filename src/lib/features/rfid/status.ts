@@ -33,7 +33,8 @@ export const securityLabel: Record<SecurityType, string> = {
 	LARGE_REFUND: 'Retur besar',
 	HIGH_DISCOUNT: 'Diskon tinggi',
 	CASH_VARIANCE: 'Selisih kas',
-	READER_OFFLINE: 'Reader offline'
+	READER_OFFLINE: 'Reader offline',
+	OFFLINE_PRICE_MISMATCH: 'Selisih harga offline'
 };
 
 export const severityTone = { info: 'info', warning: 'warn', critical: 'danger' } as const;

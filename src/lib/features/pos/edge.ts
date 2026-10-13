@@ -25,22 +25,22 @@ export function saveEdge(c: EdgeConfig | null) {
 	}
 }
 
-async function call(path: string, body?: unknown) {
+export async function edgeCall(path: string, body?: unknown, timeoutMs = 6000) {
 	const c = loadEdge();
 	if (!c) throw new Error('Edge agent belum dikonfigurasi');
 	const res = await fetch(c.url.replace(/\/$/, '') + path, {
 		method: body === undefined ? 'GET' : 'POST',
 		headers: { 'X-Edge-Token': c.token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
 		body: body === undefined ? undefined : JSON.stringify(body),
-		signal: AbortSignal.timeout(6000)
+		signal: AbortSignal.timeout(timeoutMs)
 	});
 	if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Edge error ${res.status}`);
 	return res.json();
 }
 
-export const edgeHealth = () => call('/health');
-export const edgePrint = (text: string, openDrawer = false) => call('/print/receipt', { text, open_drawer: openDrawer });
-export const edgeOpenDrawer = () => call('/drawer/open', {});
+export const edgeHealth = () => edgeCall('/health');
+export const edgePrint = (text: string, openDrawer = false) => edgeCall('/print/receipt', { text, open_drawer: openDrawer });
+export const edgeOpenDrawer = () => edgeCall('/drawer/open', {});
 
 /** Prints via the edge agent when configured, otherwise the browser print dialog. */
 export async function printReceipt(text: string, openDrawer = false): Promise<'edge' | 'browser'> {
@@ -50,4 +50,13 @@ export async function printReceipt(text: string, openDrawer = false): Promise<'e
 	}
 	window.print();
 	return 'browser';
+}
+
+/** Plain-text GET from the edge (receipts). */
+export async function edgeText(path: string): Promise<string> {
+	const c = loadEdge();
+	if (!c) throw new Error('Edge agent belum dikonfigurasi');
+	const res = await fetch(c.url.replace(/\/$/, '') + path, { headers: { 'X-Edge-Token': c.token }, signal: AbortSignal.timeout(6000) });
+	if (!res.ok) throw new Error(`Edge error ${res.status}`);
+	return res.text();
 }

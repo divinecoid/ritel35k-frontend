@@ -9,9 +9,10 @@
 	import { errMsg, fieldErrors } from '#lib/utils/errors';
 	import { num } from '#lib/utils/format';
 	import type { Customer } from '#lib/types/api';
-	import type { PosCustomer } from './pos.svelte';
+	import { offMembers } from './offline';
+	import type { PosCustomer, PosState } from './pos.svelte';
 
-	let { open = $bindable(), canRegister = false, onpick }: { open: boolean; canRegister?: boolean; onpick: (c: PosCustomer) => void } = $props();
+	let { open = $bindable(), pos, canRegister = false, onpick }: { open: boolean; pos: PosState; canRegister?: boolean; onpick: (c: PosCustomer) => void } = $props();
 	let q = $state('');
 	let results = $state<Customer[]>([]);
 	let registering = $state(false);
@@ -27,6 +28,10 @@
 		clearTimeout(timer);
 		if (q.trim().length < 3) return (results = []);
 		timer = setTimeout(async () => {
+			if (pos.useEdge) { // offline: the members the agent downloaded for this store
+				results = (await offMembers(pos.terminalId, q.trim()).catch(() => [])).map((m) => ({ ...m, status: 'active' }) as unknown as Customer);
+				return;
+			}
 			results = (await get<Customer[]>('/customers', { q: q.trim(), status: 'active', per_page: 6 }).catch(() => ({ data: [] as Customer[] }))).data;
 		}, 200);
 	}

@@ -24,13 +24,14 @@ export interface Page<T> {
 }
 
 /** Browser → SvelteKit BFF proxy → Go API. Tokens stay in HttpOnly cookies. */
-export async function api<T>(method: string, path: string, body?: unknown, query?: Record<string, string | number | undefined | null>): Promise<Page<T>> {
+export async function api<T>(method: string, path: string, body?: unknown, query?: Record<string, string | number | undefined | null>, opts?: { timeoutMs?: number }): Promise<Page<T>> {
 	const qs = new URLSearchParams();
 	for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
 	const res = await fetch(`/api${path}${qs.size ? `?${qs}` : ''}`, {
 		method,
 		headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
-		body: body !== undefined ? JSON.stringify(body) : undefined
+		body: body !== undefined ? JSON.stringify(body) : undefined,
+		signal: opts?.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined
 	});
 	if (res.status === 401) {
 		window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
@@ -45,7 +46,13 @@ export async function api<T>(method: string, path: string, body?: unknown, query
 }
 
 export const get = <T>(path: string, query?: Record<string, string | number | undefined | null>) => api<T>('GET', path, undefined, query);
-export const post = <T>(path: string, body?: unknown) => api<T>('POST', path, body ?? {});
+export const post = <T>(path: string, body?: unknown, opts?: { timeoutMs?: number }) => api<T>('POST', path, body ?? {}, undefined, opts);
 export const put = <T>(path: string, body: unknown) => api<T>('PUT', path, body);
 export const patch = <T>(path: string, body: unknown) => api<T>('PATCH', path, body);
 export const del = <T = void>(path: string, body?: unknown) => api<T>('DELETE', path, body);
+
+/** True when the request never got a usable answer from the server (no network, timeout, gateway down): the sale may or may not have been recorded. */
+export function isNetworkFailure(e: unknown): boolean {
+	if (e instanceof ApiError) return e.status === 502 || e.status === 503 || e.status === 504;
+	return e instanceof TypeError || (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError'));
+}

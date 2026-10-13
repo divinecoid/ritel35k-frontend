@@ -6,7 +6,7 @@
 	import { errMsg } from '#lib/utils/errors';
 	import { loadEdge, printReceipt } from './edge';
 
-	let { saleId = $bindable(), hasCash = false, change = '0', autoPrint = false, onclose }: { saleId: string | null; hasCash?: boolean; change?: string; autoPrint?: boolean; onclose?: () => void } = $props();
+	let { saleId = $bindable(), text: prerendered, hasCash = false, change = '0', autoPrint = false, onclose }: { saleId: string | null; text?: string; hasCash?: boolean; change?: string; autoPrint?: boolean; onclose?: () => void } = $props();
 	let open = $state(false);
 	let text = $state('');
 	let loading = $state(false);
@@ -14,6 +14,12 @@
 	$effect(() => {
 		if (!saleId) return;
 		open = true;
+		if (prerendered !== undefined) { // a receipt printed by the store agent while offline: nothing to fetch
+			text = prerendered;
+			loading = false;
+			if (autoPrint && loadEdge()) void print();
+			return;
+		}
 		loading = true;
 		fetch(`/api/pos/sales/${saleId}/receipt?format=text`)
 			.then((r) => (r.ok ? r.text() : Promise.reject(new Error('Gagal memuat struk'))))

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { LayoutDashboard, Package, Truck, Store, Network, SlidersHorizontal, Users, ShieldCheck, ScrollText, Tags, MonitorSmartphone, Receipt, Warehouse, Clock, ShoppingCart, ArrowLeftRight, ClipboardCheck, UserRound, BadgePercent, Ticket, Tag, BarChart3, Bell, CheckSquare, ShieldAlert, Radio } from '@lucide/svelte';
+	import { LayoutDashboard, Package, Truck, Store, Network, SlidersHorizontal, Users, ShieldCheck, ScrollText, Tags, MonitorSmartphone, Receipt, Warehouse, Clock, ShoppingCart, ArrowLeftRight, ClipboardCheck, UserRound, BadgePercent, Ticket, Tag, BarChart3, Bell, CheckSquare, ShieldAlert, Radio, TrendingUp, WifiOff } from '@lucide/svelte';
 	import { can } from '#lib/permissions';
 	import type { Me } from '#lib/types/api';
 
@@ -25,12 +25,14 @@
 				{ href: '/pos', label: 'Buka kasir (POS)', icon: MonitorSmartphone, perm: 'pos.transaction.create', external: true },
 				{ href: '/sales', label: 'Penjualan', icon: Receipt, perm: 'pos.sale.view' },
 				{ href: '/shifts', label: 'Shift kasir', icon: Clock, perm: 'pos.sale.view' },
-				{ href: '/inventory', label: 'Inventori', icon: Warehouse, perm: 'inventory.view' }
+				{ href: '/inventory', label: 'Inventori', icon: Warehouse, perm: 'inventory.view' },
+				{ href: '/offline', label: 'Penjualan offline', icon: WifiOff, perm: 'security.view' }
 			]
 		},
 		{
 			title: 'Rantai pasok',
 			items: [
+				{ href: '/replenishment', label: 'Saran restock', icon: TrendingUp, perm: 'inventory.view' },
 				{ href: '/purchasing', label: 'Pembelian', icon: ShoppingCart, perm: 'purchase_order.view' },
 				{ href: '/transfers', label: 'Transfer stok', icon: ArrowLeftRight, perm: 'inventory.transfer' },
 				{ href: '/stock-counts', label: 'Stok opname', icon: ClipboardCheck, perm: 'inventory.count' }

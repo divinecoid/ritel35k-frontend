@@ -37,11 +37,19 @@
 	let counted = $state('');
 	let note = $state('');
 	let result = $state<Shift | null>(null);
+	let queued = $state(false);
 
 	async function close() {
 		busy = true;
 		try {
-			result = (await post<Shift>(`/pos/shifts/${pos.shift!.id}/close`, { counted_cash: Number(counted) || 0, note })).data;
+			if (pos.useEdge) {
+				const r = await pos.closeShiftOffline(Number(counted) || 0, note);
+				const sh = pos.shift!;
+				result = { ...sh, status: 'closed', expected_cash: r.expected_cash ?? null, counted_cash: r.counted_cash, variance: r.variance ?? null, totals: { ...sh.totals } } as Shift;
+				queued = true;
+			} else {
+				result = (await post<Shift>(`/pos/shifts/${pos.shift!.id}/close`, { counted_cash: Number(counted) || 0, note })).data;
+			}
 		} catch (e) {
 			toast.error(errMsg(e));
 		} finally {
@@ -52,7 +60,9 @@
 	async function done() {
 		closeOpen = false;
 		result = null;
+		queued = false;
 		counted = note = '';
+		pos.shift = null; // the shift is closed (or queued to close)
 		await pos.loadShift();
 	}
 </script>
@@ -74,10 +84,11 @@
 		<Field label="Catatan" for="cl-note"><Input id="cl-note" bind:value={note} /></Field>
 	{:else}
 		{@const v = Number(result.variance ?? 0)}
+		{#if queued}<p class="rounded-md bg-warn/10 px-3 py-2 text-warn">Tutup shift disimpan di toko dan dikirim ke server saat internet pulih.{#if result.expected_cash === null} Selisih dihitung server.{/if}</p>{/if}
 		<dl class="grid grid-cols-2 gap-y-2">
-			<dt class="text-muted">Seharusnya</dt><dd class="num text-right">{idr(result.expected_cash)}</dd>
+			<dt class="text-muted">Seharusnya</dt><dd class="num text-right">{result.expected_cash === null ? '—' : idr(result.expected_cash)}</dd>
 			<dt class="text-muted">Dihitung</dt><dd class="num text-right">{idr(result.counted_cash)}</dd>
-			<dt class="font-medium">Selisih</dt><dd class="num text-right font-semibold {v === 0 ? 'text-ok' : 'text-danger'}">{v === 0 ? 'Sesuai' : idr(v)}</dd>
+			<dt class="font-medium">Selisih</dt><dd class="num text-right font-semibold {v === 0 ? 'text-ok' : 'text-danger'}">{result.variance === null ? '—' : v === 0 ? 'Sesuai' : idr(v)}</dd>
 			<dt class="text-muted">Penjualan</dt><dd class="num text-right">{result.totals.sale_count} transaksi · {idr(result.totals.gross_sales)}</dd>
 		</dl>
 	{/if}

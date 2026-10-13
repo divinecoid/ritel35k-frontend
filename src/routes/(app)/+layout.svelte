@@ -41,7 +41,7 @@
 					<p class="font-medium">{data.me.user.name}</p>
 					<p class="text-[12px] text-muted">{data.me.roles.map((r) => r.role_name).join(', ')}</p>
 				</div>
-				<form method="POST" action="/logout">
+				<form method="POST" action="/logout" onsubmit={() => navigator.serviceWorker?.controller?.postMessage('purge-pages')}>
 					<button class="rounded-md p-2 text-muted hover:bg-surface-2" title="Keluar" aria-label="Keluar"><LogOut class="size-4" /></button>
 				</form>
 			</div>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-	import { Plus } from '@lucide/svelte';
+	import { KeyRound, Plus } from '@lucide/svelte';
 	import Badge from '#lib/components/ui/Badge.svelte';
 	import Button from '#lib/components/ui/Button.svelte';
 	import Card from '#lib/components/ui/Card.svelte';
@@ -34,6 +34,13 @@
 		onSuccess: async () => { toast.ok('Terminal dibuat'); open = false; code = name = ''; errors = {}; await qc.invalidateQueries({ queryKey: ['terminals'] }); },
 		onError: (e) => { errors = fieldErrors(e); toast.error(errMsg(e)); }
 	}));
+	let token = $state<{ code: string; value: string } | null>(null);
+	let tokenOpen = $state(false);
+	const issue = createMutation(() => ({
+		mutationFn: async (t: Terminal) => ({ code: t.code, ...(await post<{ token: string; hint: string }>(`/pos/terminals/${t.id}/sync-token`)).data }),
+		onSuccess: (r) => { token = { code: r.code, value: r.token }; tokenOpen = true; },
+		onError: (e) => toast.error(errMsg(e))
+	}));
 	const toggle = createMutation(() => ({
 		mutationFn: (t: Terminal) => patch(`/pos/terminals/${t.id}`, { status: t.status === 'active' ? 'inactive' : 'active' }),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ['terminals'] }),
@@ -56,13 +63,20 @@
 					<tr class="border-b border-border last:border-0">
 						<td class="px-4 py-2.5">{t.store_name}</td><td class="font-mono text-[13px]">{t.code}</td><td>{t.name}</td>
 						<td><Badge tone={t.status === 'active' ? 'ok' : 'warn'}>{t.status}</Badge></td>
-						<td class="pr-4 text-right">{#if managedStores.length}<Button size="sm" variant="ghost" onclick={() => toggle.mutate(t)}>{t.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</Button>{/if}</td>
+						<td class="pr-4 text-right">{#if managedStores.length}<Button size="sm" variant="ghost" onclick={() => issue.mutate(t)} title="Kredensial agen toko untuk mode offline"><KeyRound class="size-4" />Token offline</Button><Button size="sm" variant="ghost" onclick={() => toggle.mutate(t)}>{t.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}</Button>{/if}</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
 	{/if}
 </Card>
+
+<Dialog bind:open={tokenOpen} title="Token sinkron terminal {token?.code ?? ''}">
+	<p class="text-muted">Tempel token ini di konfigurasi agen toko (<code>pos</code>). Token hanya ditampilkan sekali; membuat ulang token mencabut yang lama.</p>
+	<pre class="overflow-auto rounded-md border border-border bg-surface-2 p-3 font-mono text-[12px] break-all whitespace-pre-wrap select-all">{token?.value}</pre>
+	<pre class="overflow-auto rounded-md border border-border bg-surface-2 p-3 font-mono text-[12px] select-all">{`"pos": [{ "name": "${token?.code.toLowerCase()}", "token": "${token?.value}" }]`}</pre>
+	{#snippet footer()}<Button onclick={() => { tokenOpen = false; token = null; }}>Selesai</Button>{/snippet}
+</Dialog>
 
 <Dialog bind:open title="Tambah terminal">
 	<Field label="Toko" for="t-store"><Select id="t-store" bind:value={store}>{#each managedStores as s (s.id)}<option value={s.store_id}>{s.name}</option>{/each}</Select></Field>

@@ -15,9 +15,14 @@
 	async function open() {
 		busy = true;
 		try {
-			await post('/pos/shifts/open', { terminal_id: pos.terminalId, opening_cash: Number(cash) || 0 });
-			await pos.loadShift();
-			toast.ok('Shift dibuka');
+			if (pos.useEdge) {
+				await pos.openShiftOffline(Number(cash) || 0); // cloud unreachable: the store agent opens it and delivers it later
+				toast.ok('Shift offline dibuka — akan dikirim ke server saat online');
+			} else {
+				await post('/pos/shifts/open', { terminal_id: pos.terminalId, opening_cash: Number(cash) || 0 });
+				await pos.loadShift();
+				toast.ok('Shift dibuka');
+			}
 		} catch (e) {
 			toast.error(errMsg(e));
 		} finally {
@@ -41,7 +46,8 @@
 				</Select>
 			</Field>
 			<Field label="Kas awal (Rp)" for="g-cash"><Input id="g-cash" inputmode="numeric" bind:value={cash} /></Field>
-			<Button type="submit" class="w-full" loading={busy}>Buka shift</Button>
+			{#if pos.useEdge}<p class="text-[12px] text-warn">Mode offline: shift dibuka di agen toko dan dikirim saat internet pulih.</p>{/if}
+			<Button type="submit" class="w-full" loading={busy} disabled={!pos.canSell}>Buka shift</Button>
 		{/if}
 		<a href="/dashboard" class="block text-center text-muted hover:underline">← Kembali ke back office</a>
 	</form>

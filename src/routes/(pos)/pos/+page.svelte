@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-	import { Banknote, BadgePercent, Clock, Ticket, UserRound, LogOut, Minus, PauseCircle, Plus, Printer, ScanBarcode, Search, Trash2, Wallet, X } from '@lucide/svelte';
+	import { Banknote, BadgePercent, Clock, Ticket, UserRound, LogOut, Minus, PauseCircle, Plus, Printer, RefreshCw, ScanBarcode, Search, Trash2, TriangleAlert, Wallet, WifiOff, X } from '@lucide/svelte';
 	import Button from '#lib/components/ui/Button.svelte';
 	import Dialog from '#lib/components/ui/Dialog.svelte';
 	import { toast } from '#lib/components/ui/toast.svelte';
@@ -11,18 +11,22 @@
 	import CustomerDialog from '#lib/features/pos/CustomerDialog.svelte';
 	import { can } from '#lib/permissions';
 	import ShiftGate from '#lib/features/pos/ShiftGate.svelte';
-	import { PosState } from '#lib/features/pos/pos.svelte';
+	import { PosState, type OfflineSaleDetail } from '#lib/features/pos/pos.svelte';
+	import { net } from '#lib/features/pos/connectivity.svelte';
+	import { offProducts } from '#lib/features/pos/offline';
 	import { get } from '#lib/api/client';
 	import { errMsg } from '#lib/utils/errors';
 	import { dateTime, idr, num } from '#lib/utils/format';
-	import type { Product, SaleDetail } from '#lib/types/api';
+	import type { Product } from '#lib/types/api';
 
 	let { data } = $props();
-	const pos = new PosState(untrack(() => data.terminals));
+	const pos = new PosState(untrack(() => data.terminals), untrack(() => ({ id: data.me.user.id, name: data.me.user.name })));
+
+	type Hit = { variantId: string; name: string; sub: string };
 
 	let scan = $state('');
 	let scanEl: HTMLInputElement | undefined = $state();
-	let results = $state<Product[]>([]);
+	let results = $state<Hit[]>([]);
 	let searching = $state(false);
 	let payOpen = $state(false);
 	let cashOpen = $state(false);
@@ -33,10 +37,12 @@
 	let voucherInput = $state('');
 	let showVoucher = $state(false);
 	let receiptId = $state<string | null>(null);
-	let lastSale = $state<SaleDetail | null>(null);
+	let lastSale = $state<OfflineSaleDetail | null>(null);
+	let receiptText = $state<string | undefined>(undefined);
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 	onMount(() => {
+		const stop = pos.start();
 		void pos.loadShift();
 		const key = (e: KeyboardEvent) => {
 			if (e.key === 'F2') (e.preventDefault(), scanEl?.focus());
@@ -45,7 +51,10 @@
 			else if (e.key === 'F12' && pos.items.length && !payOpen) (e.preventDefault(), (payOpen = true));
 		};
 		window.addEventListener('keydown', key);
-		return () => window.removeEventListener('keydown', key);
+		return () => {
+			window.removeEventListener('keydown', key);
+			stop();
+		};
 	});
 
 	$effect(() => {
@@ -79,7 +88,12 @@
 		searchTimer = setTimeout(async () => {
 			searching = true;
 			try {
-				results = (await get<Product[]>('/products', { q, per_page: 8, status: 'active' })).data;
+				if (pos.useEdge) {
+					results = (await offProducts(pos.terminalId, q)).map((p) => ({ variantId: p.variant_id, name: p.name, sub: `${p.sku} · ${p.barcode || '—'} · ${idr(p.price)}` }));
+				} else {
+					const ps = (await get<Product[]>('/products', { q, per_page: 8, status: 'active' })).data;
+					results = ps.flatMap((p) => p.variants.map((v) => ({ variantId: v.id, name: `${p.name} ${v.name}`.trim(), sub: `${v.sku} · ${v.barcodes[0]?.barcode ?? '—'}` })));
+				}
 			} catch {
 				results = [];
 			} finally {
@@ -99,10 +113,11 @@
 		void focusScan();
 	}
 
-	function completed(s: SaleDetail) {
+	function completed(s: OfflineSaleDetail) {
 		voucherInput = '';
 		showVoucher = false;
 		lastSale = s;
+		receiptText = s.offline ? s.offline_text : undefined;
 		receiptId = s.id;
 	}
 
@@ -130,13 +145,24 @@
 	</div>
 	<div class="flex items-center gap-1">
 		{#if pos.shift}
-			<Button size="sm" variant="ghost" onclick={() => (cashOpen = true)}><Banknote class="size-4" />Kas</Button>
+			<Button size="sm" variant="ghost" disabled={pos.useEdge} title={pos.useEdge ? 'Tidak tersedia saat offline' : undefined} onclick={() => (cashOpen = true)}><Banknote class="size-4" />Kas</Button>
 			<Button size="sm" variant="ghost" onclick={() => (closeOpen = true)}><Wallet class="size-4" />Tutup shift</Button>
 		{/if}
 		<Button size="sm" variant="ghost" onclick={() => (devicesOpen = true)}><Printer class="size-4" />Perangkat</Button>
 		<a href="/dashboard" class="inline-flex h-8 items-center gap-1 rounded-md px-3 text-[13px] hover:bg-surface-2"><LogOut class="size-4" />Back office</a>
 	</div>
 </header>
+
+{#if !net.online && !pos.edge?.ready}
+	<div class="flex items-center gap-2 border-b border-danger/40 bg-danger/10 px-4 py-2 text-danger" role="alert"><WifiOff class="size-4" /><b>Tidak ada koneksi ke server</b> dan agen kasir toko {pos.edgeOn ? 'belum punya katalog (sambungkan sekali ke internet)' : 'belum disetel (menu Perangkat)'} — penjualan tidak bisa dilakukan.</div>
+{:else if !net.online}
+	<div class="flex items-center gap-2 border-b border-warn/40 bg-warn/10 px-4 py-2 text-warn" role="status"><WifiOff class="size-4" /><b>Mode offline</b> — transaksi disimpan di toko dan dikirim otomatis saat internet pulih{#if pos.edge && pos.edge.pending > 0} · <b>{pos.edge.pending}</b> menunggu kirim{/if}. Voucher, tukar poin, dan diskon berPIN tidak tersedia.</div>
+{:else if pos.edge && pos.edge.pending > 0}
+	<div class="flex items-center gap-2 border-b border-primary/40 bg-primary/10 px-4 py-2 text-primary" role="status"><RefreshCw class="size-4 {pos.syncing ? 'animate-spin' : ''}" />Mengirim <b>{pos.edge.pending}</b> transaksi offline ke server…{#if pos.edge.last_error} <span class="text-muted">({pos.edge.last_error})</span>{/if}</div>
+{/if}
+{#if pos.edge && pos.edge.dead_letters > 0}
+	<div class="flex items-center gap-2 border-b border-danger/40 bg-danger/10 px-4 py-2 text-danger" role="alert"><TriangleAlert class="size-4" /><b>{pos.edge.dead_letters}</b> transaksi offline ditolak server dan disimpan untuk ditinjau — hubungi manajer (menu Pengecualian offline).</div>
+{/if}
 
 {#if pos.loadingShift}
 	<div class="grid flex-1 place-items-center text-muted">Memuat…</div>
@@ -161,15 +187,13 @@
 			</form>
 			{#if results.length}
 				<ul class="divide-y divide-border overflow-auto rounded-lg border border-border bg-surface">
-					{#each results as p (p.id)}
-						{#each p.variants as v (v.id)}
-							<li>
-								<button class="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-surface-2" onclick={() => pick(v.id)}>
-									<span><span class="font-medium">{p.name}</span> <span class="text-muted">{v.name}</span><br /><span class="font-mono text-[12px] text-muted">{v.sku} · {v.barcodes[0]?.barcode ?? '—'}</span></span>
-									<Plus class="size-4 text-primary" />
-								</button>
-							</li>
-						{/each}
+					{#each results as h (h.variantId)}
+						<li>
+							<button class="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-surface-2" onclick={() => pick(h.variantId)}>
+								<span><span class="font-medium">{h.name}</span><br /><span class="font-mono text-[12px] text-muted">{h.sub}</span></span>
+								<Plus class="size-4 text-primary" />
+							</button>
+						</li>
 					{/each}
 				</ul>
 			{:else if searching}
@@ -205,7 +229,7 @@
 				{#if pos.voucherCode}
 					<span class="inline-flex items-center gap-1 rounded bg-ok/15 px-2 py-1 text-[12px] font-medium text-ok"><Ticket class="size-3.5" />{pos.voucherCode}<button class="ml-1" aria-label="Lepas voucher" onclick={() => { voucherInput = ''; applyVoucher(); }}><X class="size-3" /></button></span>
 				{:else}
-					<Button size="sm" variant="ghost" onclick={() => (showVoucher = !showVoucher)}><Ticket class="size-4" />Voucher</Button>
+					<Button size="sm" variant="ghost" disabled={pos.useEdge} title={pos.useEdge ? 'Voucher butuh koneksi ke server' : undefined} onclick={() => (showVoucher = !showVoucher)}><Ticket class="size-4" />Voucher</Button>
 				{/if}
 			</div>
 			{#if showVoucher && !pos.voucherCode}
@@ -264,17 +288,17 @@
 					<span class="text-base font-semibold">TOTAL</span>
 					<span class="num text-3xl font-bold">{idr(pos.quote?.grand_total ?? 0)}</span>
 				</div>
-				<Button class="h-12 w-full text-base" disabled={!pos.items.length || !pos.quote || pos.quoting || !!pos.quoteError} onclick={() => (payOpen = true)}>Bayar (F12)</Button>
+				<Button class="h-12 w-full text-base" disabled={!pos.items.length || !pos.quote || pos.quoting || !!pos.quoteError || !pos.canSell} onclick={() => (payOpen = true)}>Bayar (F12)</Button>
 			</div>
 		</aside>
 	</div>
 {/if}
 
 <PayDialog {pos} bind:open={payOpen} oncomplete={completed} />
-<ReceiptDialog bind:saleId={receiptId} {hasCash} change={lastSale?.change_amount ?? '0'} autoPrint onclose={focusScan} />
+<ReceiptDialog bind:saleId={receiptId} text={receiptText} {hasCash} change={lastSale?.change_amount ?? '0'} autoPrint onclose={focusScan} />
 {#if pos.shift}<ShiftDialogs {pos} bind:cashOpen bind:closeOpen />{/if}
 <DevicesDialog bind:open={devicesOpen} />
-<CustomerDialog bind:open={customerOpen} canRegister={can(data.me.grants, 'customer.create')} onpick={(c) => pos.setCustomer(c).catch((e) => toast.error(errMsg(e)))} />
+<CustomerDialog bind:open={customerOpen} {pos} canRegister={can(data.me.grants, 'customer.create') && !pos.useEdge} onpick={(c) => pos.setCustomer(c).catch((e) => toast.error(errMsg(e)))} />
 
 <Dialog bind:open={heldOpen} title="Transaksi ditahan">
 	{#if !pos.held.length}<p class="text-muted">Tidak ada transaksi yang ditahan.</p>{/if}
