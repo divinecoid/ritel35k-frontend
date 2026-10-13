@@ -44,6 +44,7 @@ export interface Approval {
 
 const HELD_KEY = 'r35k_held_v1';
 const TERMINAL_KEY = 'r35k_terminal_v1';
+const SHIFT_KEY = 'r35k_shift_v1'; // the cloud's open shift, remembered so a page reload while offline still knows it
 
 const uid = () => crypto.randomUUID();
 
@@ -131,6 +132,30 @@ export class PosState {
 		}
 	}
 
+	private rememberShift(sh: Shift | null) {
+		try {
+			if (sh) localStorage.setItem(SHIFT_KEY, JSON.stringify(sh));
+			else localStorage.removeItem(SHIFT_KEY);
+		} catch {
+			/* ignore */
+		}
+	}
+
+	private recallShift(): Shift | null {
+		try {
+			const sh = JSON.parse(localStorage.getItem(SHIFT_KEY) ?? 'null') as Shift | null;
+			return sh && sh.status === 'open' && sh.cashier_id === this.me.id ? sh : null;
+		} catch {
+			return null;
+		}
+	}
+
+	/** Forget the current shift (it was closed). */
+	clearShift() {
+		this.shift = null;
+		this.rememberShift(null);
+	}
+
 	#poll: ReturnType<typeof setInterval> | undefined;
 	#unsub: (() => void) | undefined;
 
@@ -187,6 +212,7 @@ export class PosState {
 				try {
 					const cloud = (await get<Shift | null>('/pos/shifts/current')).data;
 					this.shift = cloud;
+					this.rememberShift(cloud);
 					if (cloud) this.setTerminal(cloud.terminal_id);
 					return;
 				} catch (e) {
@@ -199,7 +225,7 @@ export class PosState {
 			if (this.shift && !this.offlineShift) return; // a shift the cloud opened earlier stays valid; sales carry its id
 			if (!this.edgeOn || !this.terminalId) return;
 			const r = await offShift(this.terminalId, this.me.id).catch(() => null);
-			this.shift = r?.shift ? shiftFromEdge(r.shift, this.terminalId) : null;
+			this.shift = r?.shift ? shiftFromEdge(r.shift, this.terminalId) : this.recallShift(); // else the cloud's shift from before the outage
 		} finally {
 			this.loadingShift = false;
 		}

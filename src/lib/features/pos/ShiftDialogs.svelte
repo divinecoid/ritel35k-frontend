@@ -62,7 +62,7 @@
 		result = null;
 		queued = false;
 		counted = note = '';
-		pos.shift = null; // the shift is closed (or queued to close)
+		pos.clearShift(); // the shift is closed (or queued to close)
 		await pos.loadShift();
 	}
 </script>

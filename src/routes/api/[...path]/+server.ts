@@ -8,12 +8,23 @@ const handler: RequestHandler = async ({ params, url, request, locals }) => {
 	if (ct) headers.set('content-type', ct);
 	const rid = request.headers.get('x-request-id');
 	if (rid) headers.set('x-request-id', rid);
-	const res = await locals.api(`/${params.path}${url.search}`, {
-		method: request.method,
-		headers,
-		body: hasBody ? await request.text() : undefined,
-		signal: request.signal // stop the upstream call (and SSE streams) when the browser goes away
-	});
+	const body = hasBody ? await request.text() : undefined;
+	let res: Response;
+	try {
+		res = await locals.api(`/${params.path}${url.search}`, {
+			method: request.method,
+			headers,
+			body,
+			signal: request.signal // stop the upstream call (and SSE streams) when the browser goes away
+		});
+	} catch (e) {
+		if (request.signal.aborted) throw e;
+		// The Go API is unreachable. A clear 502 (not a generic 500) lets the POS tell "no connection" from "refused".
+		return new Response(JSON.stringify({ success: false, error: { code: 'UPSTREAM_UNAVAILABLE', message: 'Server tidak dapat dihubungi' } }), {
+			status: 502,
+			headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+		});
+	}
 	const out = new Headers();
 	const rct = res.headers.get('content-type');
 	if (rct) out.set('content-type', rct);
