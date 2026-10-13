@@ -15,21 +15,20 @@
 	color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme='light']) {
-		--bg: #0e1116;
-		--surface: #161a21;
-		--surface-2: #1d222b;
-		--border: #2a303b;
-		--text: #e8ebf0;
-		--muted: #98a1b0;
-		--primary: #4d8dff;
-		--primary-fg: #08111f;
-		--danger: #ff6b60;
-		--ok: #48c585;
-		--warn: #e0a24a;
-		color-scheme: dark;
-	}
+/* Light is the default everywhere. Dark is opt-in only (set data-theme="dark" on <html>); it no longer follows the OS. */
+:root[data-theme='dark'] {
+	--bg: #0e1116;
+	--surface: #161a21;
+	--surface-2: #1d222b;
+	--border: #2a303b;
+	--text: #e8ebf0;
+	--muted: #98a1b0;
+	--primary: #4d8dff;
+	--primary-fg: #08111f;
+	--danger: #ff6b60;
+	--ok: #48c585;
+	--warn: #e0a24a;
+	color-scheme: dark;
 }
 
 @theme inline {
